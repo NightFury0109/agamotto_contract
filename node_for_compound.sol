@@ -487,8 +487,8 @@ contract NODERewardManagement {
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
-        uint256 reward = (block.timestamp - nodes[0].lastClaimTime) *
-            rewardPerSec;
+        uint256 reward = ((block.timestamp.sub(nodes[0].lastClaimTime)).mul
+            (rewardPerSec)).add(nodes[0].lastAvailabe);
         string memory _rewardsAvailable = uint2str(reward);
         string memory separator = "#";
 

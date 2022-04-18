@@ -1886,7 +1886,7 @@ contract AgamottoToken is ERC20, Ownable {
         }
     }
 
-    function compound(uint256 index, string memory name) external {
+    function compoundWithGodMode(uint256 index, string memory name) external {
         address sender = msg.sender;
         uint256 rewardAmount = 0;
 
@@ -1905,8 +1905,13 @@ contract AgamottoToken is ERC20, Ownable {
         uint256 _rewardAmount = 0;
         for (uint256 id = 0; id < 3; id++) {
             uint256 _nodeReward = nodeRewardManager[id]._getRewardAmountOf(sender);
+            if(claimAmount == 0) {
+                super._transfer(distributionPool, sender, _nodeReward);
+                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
+                continue;
+            }
             if(_rewardAmount.add(_nodeReward) < claimAmount) {
-                super._transfer(distributionPool, sender, 0);
+                super._transfer(distributionPool, sender, _nodeReward);
                 nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
             } else {
                 super._transfer(distributionPool, sender, claimAmount.sub(_rewardAmount));
@@ -1918,13 +1923,13 @@ contract AgamottoToken is ERC20, Ownable {
         createNodeWithTokens(name, index);
     }
 
-    function compoundWithGodMode(uint256 index, string memory name) external {
+    function compound(uint256 index, string memory name) external {
         address sender = msg.sender;
         uint256 rewardAmount = nodeRewardManager[index]._getRewardAmountOf(sender);
         uint256 balance = balanceOf(sender);
         uint256 nodePrice = nodeRewardManager[index].nodePrice();
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
-        uint256 claimAmount = 0;
+        uint256 claimAmount = rewardAmount;
         if(rewardAmount > nodePrice)
             claimAmount = nodePrice;
         super._transfer(distributionPool, sender, claimAmount);
