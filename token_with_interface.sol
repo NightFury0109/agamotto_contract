@@ -1518,9 +1518,9 @@ library SafeERC20 {
 interface INODERewardManagement {
     function nodePrice() external view returns(uint256);
     function createNode(address account, string memory nodeName) external;
-    function _getRewardAmountOf(address account) external view returns (uint256);
+    function _getRewardAmountOf(address account, bool takeSlideFee) external view returns (uint256);
     function _cashoutAllNodesReward(address account, uint256 amount) external;
-    function _getRewardAmountOf(address account, uint256 _creationTime) external view returns (uint256);
+    function _getRewardAmountOf(address account, uint256 _creationTime, bool takeSlideFee) external view returns (uint256);
     function _cashoutNodeReward(address account, uint256 _creationTime) external returns (uint256);
     function _getNodeNumberOf(address account) external view returns (uint256);
     function _isNodeOwner(address account) external view returns (bool);
@@ -1848,58 +1848,6 @@ contract AgamottoToken is ERC20, Ownable {
         _nodeNumber[sender] = _nodeNumber[sender].add(1);
     }
 
-    function cashoutAll() public {
-        address sender = _msgSender();
-
-        require(!_isBlacklisted[sender], "Cashout: Blacklisted address");
-        require(
-            sender != address(0),
-            "MANIA CSHT:  creation from the zero address"
-        );
-        require(
-            sender != futurUsePool && sender != distributionPool && sender != marketingWallet,
-            "MANIA CSHT: futur, marketing and rewardsPool cannot cashout rewards"
-        );
-
-        uint256 rewardAmount = 0;
-        uint256 feeAmount = 0;
-
-        for (uint256 id = 0; id < 3; id++) {
-            if (getNodeNumberOf(sender, id) == 0) continue;
-
-            rewardAmount = rewardAmount.add(
-                nodeRewardManager[id]
-                    ._getRewardAmountOf(sender)
-                    .mul(100 - cashoutFee[id])
-                    .div(100)
-            );
-            
-            feeAmount = feeAmount.add(
-                nodeRewardManager[id]
-                    ._getRewardAmountOf(sender)
-                    .mul(cashoutFee[id])
-                    .div(100)
-            );
-        }
-
-        require(
-            rewardAmount > 0,
-            "AgamottoToken: You don't have enough reward to cash out"
-        );
-
-        if (swapLiquify && feeAmount > 0) {
-            swapAndSendToFee(futurUsePool, feeAmount);
-        }
-
-        super._transfer(distributionPool, sender, rewardAmount);
-
-        for (uint256 id = 0; id < 3; id++) {
-            if (getNodeNumberOf(sender, id) == 0) continue;
-
-            nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
-        }
-    }
-
     function compoundWithGodMode(uint256 index, string memory name) external {
         address sender = msg.sender;
         uint256 rewardAmount = 0;
@@ -1907,7 +1855,7 @@ contract AgamottoToken is ERC20, Ownable {
         for (uint256 id = 0; id < 3; id++) {
             rewardAmount = rewardAmount.add(
                 nodeRewardManager[id]
-                    ._getRewardAmountOf(sender)
+                    ._getRewardAmountOf(sender, false)
             );
         }
 
@@ -1924,17 +1872,22 @@ contract AgamottoToken is ERC20, Ownable {
         uint256 _rewardAmount = 0;
 
         for (uint256 id = 0; id < 3; id++) {
-            uint256 _nodeReward = nodeRewardManager[id]._getRewardAmountOf(sender);
+            uint256 _nodeReward = nodeRewardManager[id]._getRewardAmountOf(sender, false);
+            // uint256 _nodeRewardWithoutSlideFee = nodeRewardManager[id]._getRewardAmountOf(sender, false);
+            // uint256 slideAmount = _nodeRewardWithoutSlideFee.sub(_nodeReward);
 
             if(claimAmount == 0) {
                 super._transfer(distributionPool, sender, _nodeReward);
-
+                // super._transfer(distributionPool, address(this), slideAmount);
+                // swapAndSendToFee(futurUsePool, slideAmount);
                 nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
                 continue;
             }
 
             if(_rewardAmount.add(_nodeReward) < claimAmount) {
                 super._transfer(distributionPool, sender, _nodeReward);
+                // super._transfer(distributionPool, address(this), slideAmount);
+                // swapAndSendToFee(futurUsePool, slideAmount);
                 nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
             } else {
                 super._transfer(distributionPool, sender, claimAmount.sub(_rewardAmount));
@@ -1948,7 +1901,7 @@ contract AgamottoToken is ERC20, Ownable {
 
     function compound(uint256 index, string memory name) external {
         address sender = msg.sender;
-        uint256 rewardAmount = nodeRewardManager[index]._getRewardAmountOf(sender);
+        uint256 rewardAmount = nodeRewardManager[index]._getRewardAmountOf(sender, false);
         uint256 balance = balanceOf(sender);
         uint256 nodePrice = nodeRewardManager[index].nodePrice();
 
@@ -1961,6 +1914,69 @@ contract AgamottoToken is ERC20, Ownable {
         super._transfer(distributionPool, sender, claimAmount);
         nodeRewardManager[index]._cashoutAllNodesReward(sender, claimAmount);
         createNodeWithTokens(name, index);
+    }
+
+    function cashoutAll() public {
+        address sender = _msgSender();
+
+        require(!_isBlacklisted[sender], "Cashout: Blacklisted address");
+        require(
+            sender != address(0),
+            "MANIA CSHT:  creation from the zero address"
+        );
+        require(
+            sender != futurUsePool && sender != distributionPool && sender != marketingWallet,
+            "MANIA CSHT: futur, marketing and rewardsPool cannot cashout rewards"
+        );
+
+        uint256 rewardAmount = 0;
+        uint256 rewardWithSlideFee = 0;
+        uint256 rewardWithoutSlideFee = 0;
+        uint256 feeAmount = 0;
+
+        for (uint256 id = 0; id < 3; id++) {
+            if (getNodeNumberOf(sender, id) == 0) continue;
+
+            rewardWithSlideFee = rewardWithSlideFee.add(
+                nodeRewardManager[id]._getRewardAmountOf(sender, true)
+            );
+            rewardWithoutSlideFee = rewardWithoutSlideFee.add(
+                nodeRewardManager[id]._getRewardAmountOf(sender, false)
+            );
+            
+            // rewardAmount = rewardAmount.add(
+            //     rewardWithSlideFee
+            //         .mul(100-cashoutFee[id])
+            //         .div(100)
+            // );
+            feeAmount = feeAmount.add(
+                rewardWithSlideFee
+                    .mul(cashoutFee[id])
+                    .div(100)
+            );
+        }
+
+        rewardAmount = rewardAmount.sub(feeAmount);
+
+        require(
+            rewardAmount > 0,
+            "AgamottoToken: You don't have enough reward to cash out"
+        );
+
+        uint256 slideAmount = rewardWithoutSlideFee.sub(rewardWithSlideFee);
+
+        if (swapLiquify && feeAmount.add(slideAmount) > 0) {
+            super._transfer(distributionPool, address(this), feeAmount.add(slideAmount));
+            swapAndSendToFee(futurUsePool, feeAmount.add(slideAmount));
+        }
+
+        super._transfer(distributionPool, sender, rewardAmount);
+
+        for (uint256 id = 0; id < 3; id++) {
+            if (getNodeNumberOf(sender, id) == 0) continue;
+
+            nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
+        }
     }
 
     function cashoutReward(uint256 id, uint256 blocktime) public {
@@ -1980,8 +1996,17 @@ contract AgamottoToken is ERC20, Ownable {
 
         uint256 rewardAmount = nodeRewardManager[id]._getRewardAmountOf(
             sender,
-            blocktime
+            blocktime,
+            true
         );
+
+        uint256 rewardWithoutSlideFee = nodeRewardManager[id]._getRewardAmountOf(
+            sender,
+            blocktime,
+            false
+        );
+
+        uint256 slideAmount = rewardWithoutSlideFee.sub(rewardAmount);
 
         require(
             rewardAmount > 0,
@@ -1993,10 +2018,11 @@ contract AgamottoToken is ERC20, Ownable {
 
             if (cashoutFee[id] > 0) {
                 feeAmount = rewardAmount.mul(cashoutFee[id]).div(100);
-                swapAndSendToFee(futurUsePool, feeAmount);
+                super._transfer(distributionPool, address(this), feeAmount.add(slideAmount));
+                swapAndSendToFee(futurUsePool, feeAmount.add(slideAmount));
             }
 
-            rewardAmount -= feeAmount;
+            rewardAmount = rewardAmount.sub(feeAmount);
         }
         super._transfer(distributionPool, sender, rewardAmount);
         nodeRewardManager[id]._cashoutNodeReward(sender, blocktime);
@@ -2009,7 +2035,7 @@ contract AgamottoToken is ERC20, Ownable {
 
     function mint(uint256 amount) external onlyOwner {
         require(amount > 0, "Invalid amount");
-        
+
         _mint(owner(), amount);
     }
 
@@ -2030,7 +2056,7 @@ contract AgamottoToken is ERC20, Ownable {
         view
         returns (uint256)
     {
-        return nodeRewardManager[id]._getRewardAmountOf(account);
+        return nodeRewardManager[id]._getRewardAmountOf(account, true);
     }
 
     function getRewardAmount(uint256 id) public view returns (uint256) {
@@ -2039,7 +2065,7 @@ contract AgamottoToken is ERC20, Ownable {
             nodeRewardManager[id]._isNodeOwner(_msgSender()),
             "NO NODE OWNER"
         );
-        return nodeRewardManager[id]._getRewardAmountOf(_msgSender());
+        return nodeRewardManager[id]._getRewardAmountOf(_msgSender(), true);
     }
 
     function changeNodePrice(uint256 newNodePrice, uint256 id)

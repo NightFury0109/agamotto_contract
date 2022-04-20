@@ -245,14 +245,21 @@ contract NODERewardManagement {
     uint256 public nodePrice;
     uint256 public rewardPerSec;
 
+    uint256 public slideFee;
+
     address public gateKeeper;
     address public token;
 
     uint256 public totalNodesCreated = 0;
 
-    constructor(uint256 _nodePrice, uint256 _rewardPerSec) {
+    constructor(
+        uint256 _nodePrice, 
+        uint256 _rewardPerSec,
+        uint256 _slideFee
+    ) {
         nodePrice = _nodePrice;
         rewardPerSec = _rewardPerSec;
+        slideFee = _slideFee;
         gateKeeper = msg.sender;
     }
 
@@ -402,7 +409,7 @@ contract NODERewardManagement {
         return rewardNode;
     }
 
-    function _getRewardAmountOf(address account)
+    function _getRewardAmountOf(address account, bool takeSlideFee)
         external
         view
         returns (uint256)
@@ -416,15 +423,19 @@ contract NODERewardManagement {
         nodesCount = nodes.length;
 
         for (uint256 i = 0; i < nodesCount; i++) {
-            rewardCount = rewardCount.add(
-                (block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewardPerSec)
-            ).add(nodes[i].lastAvailabe);
+            uint256 passedDays = (block.timestamp.sub(nodes[i].creationTime)).div(86400);
+            uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewardPerSec).add(nodes[i].lastAvailabe);
+
+            if(takeSlideFee && passedDays <= 15)
+                _rewardAmount = _rewardAmount.mul(100-slideFee).div(100);
+
+            rewardCount = rewardCount.add(_rewardAmount);
         }
 
         return rewardCount;
     }
 
-    function _getRewardAmountOf(address account, uint256 _creationTime)
+    function _getRewardAmountOf(address account, uint256 _creationTime, bool takeSlideFee)
         external
         view
         returns (uint256)
@@ -445,6 +456,10 @@ contract NODERewardManagement {
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewardPerSec
         ).add(node.lastAvailabe);
+        uint256 passedDays = (block.timestamp.sub(node.creationTime)).div(86400);
+
+        if(takeSlideFee && passedDays <= 15)
+            rewardNode = rewardNode.mul(100-slideFee).div(100);
 
         return rewardNode;
     }
@@ -530,7 +545,7 @@ contract NODERewardManagement {
         returns (string memory)
     {
         require(isNodeOwner(account), "LAST CLAIME TIME: NO NODE OWNER");
-        
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
