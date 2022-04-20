@@ -600,6 +600,10 @@ contract NODERewardManagement {
         rewardPerSec = newPrice;
     }
 
+    function _changeSlideFee(uint256 _newSlideFee) external onlySentry {
+        slideFee = _newSlideFee;
+    }
+
     function _getNodeNumberOf(address account) public view returns (uint256) {
         return nodeOwners.get(account);
     }

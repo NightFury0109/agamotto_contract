@@ -1526,6 +1526,7 @@ interface INODERewardManagement {
     function _isNodeOwner(address account) external view returns (bool);
     function _changeNodePrice(uint256 newNodePrice) external;
     function _changeRewardPerSec(uint256 newPrice) external;
+    function _changeSlideFee(uint256 _newSlideFee) external;
     function rewardPerSec() external view returns(uint256);
     function totalNodesCreated() external view returns(uint256);
 }
@@ -2079,11 +2080,12 @@ contract AgamottoToken is ERC20, Ownable {
         return nodeRewardManager[id].nodePrice();
     }
 
-    function changeRewardPerNode(uint256 newPrice, uint256 id)
-        public
-        onlyOwner
-    {
+    function changeRewardPerNode(uint256 newPrice, uint256 id) public onlyOwner {
         nodeRewardManager[id]._changeRewardPerSec(newPrice);
+    }
+
+    function changeSlideFee(uint256 newSlideFee, uint256 id) public onlyOwner {
+        nodeRewardManager[id]._changeSlideFee(newSlideFee);
     }
 
     function getRewardPerNode(uint256 id) public view returns (uint256) {
