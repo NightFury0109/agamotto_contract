@@ -273,6 +273,7 @@ contract NODERewardManagement {
             isNameAvailable(account, nodeName),
             "CREATE NODE: Name not available"
         );
+
         _nodesOfUser[account].push(
             NodeEntity({
                 name: nodeName,
@@ -351,20 +352,24 @@ contract NODERewardManagement {
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
+
         require(nodesCount > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity storage _node;
         uint256 rewardsTotal = 0;
         uint256 nodeReward = 0;
+
         for (uint256 i = 0; i < nodesCount; i++) {
             _node = nodes[i];
             nodeReward = (block.timestamp.sub(_node.lastClaimTime)).mul(rewardPerSec).add(_node.lastAvailabe);
+
             if((amount > 0 && rewardsTotal.add(nodeReward) <= amount) || amount == 0) {
                 rewardsTotal = rewardsTotal.add(nodeReward);
                 _node.lastAvailabe = 0;
                 nodes[i].lastClaimTime = block.timestamp;
             }
             else if(amount > 0 && rewardsTotal.add(nodeReward) > amount) {
-                rewardsTotal = amount;
+                // rewardsTotal = amount;
                 _node.lastAvailabe = rewardsTotal.add(nodeReward).sub(amount);
                 nodes[i].lastClaimTime = block.timestamp;
                 break;
@@ -378,16 +383,21 @@ contract NODERewardManagement {
         returns (uint256)
     {
         require(_creationTime > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 numberOfNodes = nodes.length;
+
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
+
         NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewardPerSec
         ).add(node.lastAvailabe);
+
+        node.lastAvailabe = 0;
         node.lastClaimTime = block.timestamp;
         return rewardNode;
     }
@@ -398,6 +408,7 @@ contract NODERewardManagement {
         returns (uint256)
     {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
+
         uint256 nodesCount;
         uint256 rewardCount = 0;
 
@@ -421,16 +432,20 @@ contract NODERewardManagement {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
 
         require(_creationTime > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 numberOfNodes = nodes.length;
+
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
+
         NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewardPerSec
         ).add(node.lastAvailabe);
+
         return rewardNode;
     }
 
@@ -440,11 +455,13 @@ contract NODERewardManagement {
         returns (string memory)
     {
         require(isNodeOwner(account), "GET NAMES: NO NODE OWNER");
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
         string memory names = nodes[0].name;
         string memory separator = "#";
+
         for (uint256 i = 1; i < nodesCount; i++) {
             _node = nodes[i];
             names = string(abi.encodePacked(names, separator, _node.name));
@@ -458,6 +475,7 @@ contract NODERewardManagement {
         returns (string memory)
     {
         require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
@@ -484,6 +502,7 @@ contract NODERewardManagement {
         returns (string memory)
     {
         require(isNodeOwner(account), "GET REWARD: NO NODE OWNER");
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
@@ -501,6 +520,7 @@ contract NODERewardManagement {
                 abi.encodePacked(_rewardsAvailable, separator, uint2str(reward))
             );
         }
+
         return _rewardsAvailable;
     }
 
@@ -510,6 +530,7 @@ contract NODERewardManagement {
         returns (string memory)
     {
         require(isNodeOwner(account), "LAST CLAIME TIME: NO NODE OWNER");
+        
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;

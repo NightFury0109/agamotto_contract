@@ -1586,6 +1586,7 @@ contract AgamottoToken is ERC20, Ownable {
         address uniV2Router
     ) ERC20("Agamotto", "AGMT") {
         require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
+
         IJoeRouter02 _uniswapV2Router = IJoeRouter02(uniV2Router);
 
         address _uniswapV2Pair = IJoeFactory(_uniswapV2Router.factory())
@@ -1776,7 +1777,9 @@ contract AgamottoToken is ERC20, Ownable {
             bytes(name).length > 3 && bytes(name).length < 32,
             "NODE CREATION: NAME SIZE INVALID"
         );
+
         address sender = _msgSender();
+
         require(
             _nodeNumber[sender] < maxNodeNumber,
             "cannot create node more than 100"
@@ -1790,13 +1793,17 @@ contract AgamottoToken is ERC20, Ownable {
             sender != futurUsePool && sender != distributionPool,
             "NODE CREATION: futur and rewardsPool cannot create node"
         );
+
         uint256 nodePrice = nodeRewardManager[id].nodePrice();
+
         require(
             balanceOf(sender) >= nodePrice,
             "NODE CREATION: Balance too low for creation."
         );
+
         uint256 contractTokenBalance = balanceOf(address(this));
         bool swapAmountOk = contractTokenBalance >= swapTokensAmount;
+
         if (
             swapAmountOk &&
             swapLiquify &&
@@ -1818,6 +1825,7 @@ contract AgamottoToken is ERC20, Ownable {
             );
 
             swapAndSendToFee(distributionPool, rewardsTokenstoSwap);
+            
             super._transfer(
                 address(this),
                 distributionPool,
@@ -1842,15 +1850,15 @@ contract AgamottoToken is ERC20, Ownable {
 
     function cashoutAll() public {
         address sender = _msgSender();
+
         require(!_isBlacklisted[sender], "Cashout: Blacklisted address");
         require(
             sender != address(0),
             "MANIA CSHT:  creation from the zero address"
         );
-        require(!_isBlacklisted[sender], "MANIA CSHT: Blacklisted address");
         require(
-            sender != futurUsePool && sender != distributionPool,
-            "MANIA CSHT: futur and rewardsPool cannot cashout rewards"
+            sender != futurUsePool && sender != distributionPool && sender != marketingWallet,
+            "MANIA CSHT: futur, marketing and rewardsPool cannot cashout rewards"
         );
 
         uint256 rewardAmount = 0;
@@ -1858,12 +1866,14 @@ contract AgamottoToken is ERC20, Ownable {
 
         for (uint256 id = 0; id < 3; id++) {
             if (getNodeNumberOf(sender, id) == 0) continue;
+
             rewardAmount = rewardAmount.add(
                 nodeRewardManager[id]
                     ._getRewardAmountOf(sender)
                     .mul(100 - cashoutFee[id])
                     .div(100)
             );
+            
             feeAmount = feeAmount.add(
                 nodeRewardManager[id]
                     ._getRewardAmountOf(sender)
@@ -1876,12 +1886,16 @@ contract AgamottoToken is ERC20, Ownable {
             rewardAmount > 0,
             "AgamottoToken: You don't have enough reward to cash out"
         );
+
         if (swapLiquify && feeAmount > 0) {
             swapAndSendToFee(futurUsePool, feeAmount);
         }
+
         super._transfer(distributionPool, sender, rewardAmount);
+
         for (uint256 id = 0; id < 3; id++) {
             if (getNodeNumberOf(sender, id) == 0) continue;
+
             nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
         }
     }
@@ -1896,20 +1910,29 @@ contract AgamottoToken is ERC20, Ownable {
                     ._getRewardAmountOf(sender)
             );
         }
+
         uint256 balance = balanceOf(sender);
         uint256 nodePrice = nodeRewardManager[index].nodePrice();
+
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
+
         uint256 claimAmount = 0;
-        if(rewardAmount > nodePrice)
+
+        if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
+
         uint256 _rewardAmount = 0;
+
         for (uint256 id = 0; id < 3; id++) {
             uint256 _nodeReward = nodeRewardManager[id]._getRewardAmountOf(sender);
+
             if(claimAmount == 0) {
                 super._transfer(distributionPool, sender, _nodeReward);
+
                 nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
                 continue;
             }
+
             if(_rewardAmount.add(_nodeReward) < claimAmount) {
                 super._transfer(distributionPool, sender, _nodeReward);
                 nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
@@ -1928,9 +1951,12 @@ contract AgamottoToken is ERC20, Ownable {
         uint256 rewardAmount = nodeRewardManager[index]._getRewardAmountOf(sender);
         uint256 balance = balanceOf(sender);
         uint256 nodePrice = nodeRewardManager[index].nodePrice();
+
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
+
         uint256 claimAmount = rewardAmount;
-        if(rewardAmount > nodePrice)
+
+        if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
         super._transfer(distributionPool, sender, claimAmount);
         nodeRewardManager[index]._cashoutAllNodesReward(sender, claimAmount);
@@ -1939,14 +1965,15 @@ contract AgamottoToken is ERC20, Ownable {
 
     function cashoutReward(uint256 id, uint256 blocktime) public {
         address sender = _msgSender();
+
         require(
             sender != address(0),
             "AgamottoToken:  creation from the zero address"
         );
         require(!_isBlacklisted[sender], "Cashout: Blacklisted address");
         require(
-            sender != futurUsePool && sender != distributionPool,
-            "CSHT: futur and rewardsPool cannot cashout rewards"
+            sender != futurUsePool && sender != distributionPool && sender != marketingWallet,
+            "CSHT: futur, marketing and rewardsPool cannot cashout rewards"
         );
 
         if (getNodeNumberOf(sender, id) == 0) return;
@@ -1955,17 +1982,20 @@ contract AgamottoToken is ERC20, Ownable {
             sender,
             blocktime
         );
+
         require(
             rewardAmount > 0,
             "CSHT: You don't have enough reward to cash out"
         );
 
         if (swapLiquify) {
-            uint256 feeAmount;
+            uint256 feeAmount = 0;
+
             if (cashoutFee[id] > 0) {
                 feeAmount = rewardAmount.mul(cashoutFee[id]).div(100);
                 swapAndSendToFee(futurUsePool, feeAmount);
             }
+
             rewardAmount -= feeAmount;
         }
         super._transfer(distributionPool, sender, rewardAmount);
@@ -1979,6 +2009,7 @@ contract AgamottoToken is ERC20, Ownable {
 
     function mint(uint256 amount) external onlyOwner {
         require(amount > 0, "Invalid amount");
+        
         _mint(owner(), amount);
     }
 
