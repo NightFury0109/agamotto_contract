@@ -1957,7 +1957,7 @@ contract AgamottoToken is ERC20, Ownable {
             );
         }
 
-        rewardAmount = rewardAmount.sub(feeAmount);
+        rewardAmount = rewardWithSlideFee.sub(feeAmount);
 
         require(
             rewardAmount > 0,
