@@ -1519,16 +1519,20 @@ interface INODERewardManagement {
     function nodePrice() external view returns(uint256);
     function createNode(address account, string memory nodeName) external;
     function _getRewardAmountOf(address account, bool takeSlideFee) external view returns (uint256);
-    function _cashoutAllNodesReward(address account, uint256 amount) external;
+    function _cashoutAllNodesReward(address account, uint256 amount, bool recordClaimTime) external;
     function _getRewardAmountOf(address account, uint256 _creationTime, bool takeSlideFee) external view returns (uint256);
     function _cashoutNodeReward(address account, uint256 _creationTime) external returns (uint256);
     function _getNodeNumberOf(address account) external view returns (uint256);
+    function _getLastCashoutAllTime(address account) external view returns (uint256);
     function _isNodeOwner(address account) external view returns (bool);
     function _changeNodePrice(uint256 newNodePrice) external;
     function _changeRewardPerSec(uint256 newPrice) external;
     function _changeSlideFee(uint256 _newSlideFee) external;
+    function _changeSlideFeeDays(uint256 _newSlideFeeDays) external;
     function rewardPerSec() external view returns(uint256);
     function totalNodesCreated() external view returns(uint256);
+    function slideFee() external view returns(uint256);
+    function slideFeeDays() external view returns(uint256);
 }
 
 contract AgamottoToken is ERC20, Ownable {
@@ -1881,7 +1885,7 @@ contract AgamottoToken is ERC20, Ownable {
                 super._transfer(distributionPool, sender, _nodeReward);
                 // super._transfer(distributionPool, address(this), slideAmount);
                 // swapAndSendToFee(futurUsePool, slideAmount);
-                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
+                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0, false);
                 continue;
             }
 
@@ -1889,10 +1893,10 @@ contract AgamottoToken is ERC20, Ownable {
                 super._transfer(distributionPool, sender, _nodeReward);
                 // super._transfer(distributionPool, address(this), slideAmount);
                 // swapAndSendToFee(futurUsePool, slideAmount);
-                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
+                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0, false);
             } else {
                 super._transfer(distributionPool, sender, claimAmount.sub(_rewardAmount));
-                nodeRewardManager[id]._cashoutAllNodesReward(sender, claimAmount.sub(_rewardAmount));
+                nodeRewardManager[id]._cashoutAllNodesReward(sender, claimAmount.sub(_rewardAmount), false);
                 break;
             }
             _rewardAmount = _rewardAmount.add(_nodeReward);
@@ -1913,7 +1917,7 @@ contract AgamottoToken is ERC20, Ownable {
         if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
         super._transfer(distributionPool, sender, claimAmount);
-        nodeRewardManager[index]._cashoutAllNodesReward(sender, claimAmount);
+        nodeRewardManager[index]._cashoutAllNodesReward(sender, claimAmount, false);
         createNodeWithTokens(name, index);
     }
 
@@ -1976,7 +1980,7 @@ contract AgamottoToken is ERC20, Ownable {
         for (uint256 id = 0; id < 3; id++) {
             if (getNodeNumberOf(sender, id) == 0) continue;
 
-            nodeRewardManager[id]._cashoutAllNodesReward(sender, 0);
+            nodeRewardManager[id]._cashoutAllNodesReward(sender, 0, true);
         }
     }
 
@@ -2087,9 +2091,21 @@ contract AgamottoToken is ERC20, Ownable {
     function changeSlideFee(uint256 newSlideFee, uint256 id) public onlyOwner {
         nodeRewardManager[id]._changeSlideFee(newSlideFee);
     }
+    
+    function changeSlideFeeDays(uint256 newSlideFeeDays, uint256 id) public onlyOwner {
+        nodeRewardManager[id]._changeSlideFeeDays(newSlideFeeDays);
+    }
 
     function getRewardPerNode(uint256 id) public view returns (uint256) {
         return nodeRewardManager[id].rewardPerSec();
+    }
+
+    function getSlideFee(uint256 id) public view returns (uint256) {
+        return nodeRewardManager[id].slideFee();
+    }
+
+    function getSlideFeeDays(uint256 id) public view returns (uint256) {
+        return nodeRewardManager[id].slideFeeDays();
     }
 
     function getTotalCreatedNodes() public view returns (uint256) {
@@ -2098,6 +2114,14 @@ contract AgamottoToken is ERC20, Ownable {
             res = res.add(nodeRewardManager[id].totalNodesCreated());
         }
         return res;
+    }
+
+    function getLastCashoutAllTime(address account, uint256 id)
+        public
+        view
+        returns (uint256)
+    {
+        return nodeRewardManager[id]._getLastCashoutAllTime(account);
     }
 
     function updateCashoutFee(uint256 id, uint256 value) external onlyOwner {

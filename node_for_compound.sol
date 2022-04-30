@@ -241,11 +241,13 @@ contract NODERewardManagement {
 
     IterableMapping.Map private nodeOwners;
     mapping(address => NodeEntity[]) private _nodesOfUser;
+    mapping(address => uint256) private lastCashoutAllTime;
 
     uint256 public nodePrice;
     uint256 public rewardPerSec;
 
     uint256 public slideFee;
+    uint256 public slideFeeDays = 15;
 
     address public gateKeeper;
     address public token;
@@ -352,7 +354,7 @@ contract NODERewardManagement {
         }
     }
 
-    function _cashoutAllNodesReward(address account, uint256 amount)
+    function _cashoutAllNodesReward(address account, uint256 amount, bool recordClaimTime)
         external
         onlySentry
         returns (uint256)
@@ -382,6 +384,10 @@ contract NODERewardManagement {
                 break;
             }
         }
+
+        if(recordClaimTime)
+            lastCashoutAllTime[account] = block.timestamp;
+
         return rewardsTotal;
     }
 
@@ -409,6 +415,16 @@ contract NODERewardManagement {
         return rewardNode;
     }
 
+    function _getLastCashoutAllTime(address account)
+        external
+        view
+        returns (uint256)
+    {
+        require(isNodeOwner(account), "GET LAST CASHOUT ALL TIME: NO NODE OWNER");
+
+        return lastCashoutAllTime[account];
+    }
+
     function _getRewardAmountOf(address account, bool takeSlideFee)
         external
         view
@@ -423,10 +439,10 @@ contract NODERewardManagement {
         nodesCount = nodes.length;
 
         for (uint256 i = 0; i < nodesCount; i++) {
-            uint256 passedDays = (block.timestamp.sub(nodes[i].creationTime)).div(86400);
+            uint256 passedDays = (block.timestamp.sub(nodes[i].lastClaimTime)).div(86400);
             uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewardPerSec).add(nodes[i].lastAvailabe);
 
-            if(takeSlideFee && passedDays <= 15)
+            if(takeSlideFee && passedDays <= slideFeeDays)
                 _rewardAmount = _rewardAmount.mul(100-slideFee).div(100);
 
             rewardCount = rewardCount.add(_rewardAmount);
@@ -456,9 +472,9 @@ contract NODERewardManagement {
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewardPerSec
         ).add(node.lastAvailabe);
-        uint256 passedDays = (block.timestamp.sub(node.creationTime)).div(86400);
+        uint256 passedDays = (block.timestamp.sub(node.lastClaimTime)).div(86400);
 
-        if(takeSlideFee && passedDays <= 15)
+        if(takeSlideFee && passedDays <= slideFeeDays)
             rewardNode = rewardNode.mul(100-slideFee).div(100);
 
         return rewardNode;
@@ -602,6 +618,10 @@ contract NODERewardManagement {
 
     function _changeSlideFee(uint256 _newSlideFee) external onlySentry {
         slideFee = _newSlideFee;
+    }
+
+    function _changeSlideFeeDays(uint256 _newSlideFeeDays) external onlySentry {
+        slideFeeDays = _newSlideFeeDays;
     }
 
     function _getNodeNumberOf(address account) public view returns (uint256) {
