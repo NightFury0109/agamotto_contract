@@ -246,7 +246,7 @@ contract NODERewardManagement {
     uint256 public nodePrice;
     uint256 public rewardPerSec;
 
-    uint256 public slideFee;
+    uint256 public slideFee = 5;
     uint256 public slideFeeDays = 15;
 
     address public gateKeeper;
@@ -257,11 +257,9 @@ contract NODERewardManagement {
     constructor(
         uint256 _nodePrice, 
         uint256 _rewardPerSec,
-        uint256 _slideFee
     ) {
         nodePrice = _nodePrice;
         rewardPerSec = _rewardPerSec;
-        slideFee = _slideFee;
         gateKeeper = msg.sender;
     }
 
