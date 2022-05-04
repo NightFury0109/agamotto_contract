@@ -241,13 +241,15 @@ contract NODERewardManagement {
 
     IterableMapping.Map private nodeOwners;
     mapping(address => NodeEntity[]) private _nodesOfUser;
-    mapping(address => uint256) private lastCashoutAllTime;
 
     uint256 public nodePrice;
     uint256 public rewardPerSec;
 
-    uint256 public slideFee = 5;
-    uint256 public slideFeeDays = 15;
+    uint256[4] public slideTax = [50, 30, 20, 0];
+    uint256[4] public slideTaxDays = [0, 7, 15, 30];
+
+    // uint256 public slideFee = 5;
+    // uint256 public slideFeeDays = 15;
 
     address public gateKeeper;
     address public token;
@@ -256,7 +258,7 @@ contract NODERewardManagement {
 
     constructor(
         uint256 _nodePrice, 
-        uint256 _rewardPerSec,
+        uint256 _rewardPerSec
     ) {
         nodePrice = _nodePrice;
         rewardPerSec = _rewardPerSec;
@@ -352,7 +354,7 @@ contract NODERewardManagement {
         }
     }
 
-    function _cashoutAllNodesReward(address account, uint256 amount, bool recordClaimTime)
+    function _cashoutAllNodesReward(address account, uint256 amount, bool takeTax)
         external
         onlySentry
         returns (uint256)
@@ -370,6 +372,11 @@ contract NODERewardManagement {
             _node = nodes[i];
             nodeReward = (block.timestamp.sub(_node.lastClaimTime)).mul(rewardPerSec).add(_node.lastAvailabe);
 
+            if (takeTax) {
+                uint tax = _calcSlideTax(_node);
+                nodeReward = nodeReward.mul(100-tax).div(100);
+            }
+
             if((amount > 0 && rewardsTotal.add(nodeReward) <= amount) || amount == 0) {
                 rewardsTotal = rewardsTotal.add(nodeReward);
                 _node.lastAvailabe = 0;
@@ -382,9 +389,6 @@ contract NODERewardManagement {
                 break;
             }
         }
-
-        if(recordClaimTime)
-            lastCashoutAllTime[account] = block.timestamp;
 
         return rewardsTotal;
     }
@@ -413,17 +417,7 @@ contract NODERewardManagement {
         return rewardNode;
     }
 
-    function _getLastCashoutAllTime(address account)
-        external
-        view
-        returns (uint256)
-    {
-        require(isNodeOwner(account), "GET LAST CASHOUT ALL TIME: NO NODE OWNER");
-
-        return lastCashoutAllTime[account];
-    }
-
-    function _getRewardAmountOf(address account, bool takeSlideFee)
+    function _getRewardAmountOf(address account, bool takeTax)
         external
         view
         returns (uint256)
@@ -437,11 +431,12 @@ contract NODERewardManagement {
         nodesCount = nodes.length;
 
         for (uint256 i = 0; i < nodesCount; i++) {
-            uint256 passedDays = (block.timestamp.sub(nodes[i].lastClaimTime)).div(86400);
             uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewardPerSec).add(nodes[i].lastAvailabe);
 
-            if(takeSlideFee && passedDays <= slideFeeDays)
-                _rewardAmount = _rewardAmount.mul(100-slideFee).div(100);
+            if (takeTax) {
+                uint tax = _calcSlideTax(nodes[i]);
+                _rewardAmount = _rewardAmount.mul(100-tax).div(100);
+            }
 
             rewardCount = rewardCount.add(_rewardAmount);
         }
@@ -449,7 +444,7 @@ contract NODERewardManagement {
         return rewardCount;
     }
 
-    function _getRewardAmountOf(address account, uint256 _creationTime, bool takeSlideFee)
+    function _getRewardAmountOf(address account, uint256 _creationTime, bool takeTax)
         external
         view
         returns (uint256)
@@ -470,10 +465,11 @@ contract NODERewardManagement {
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewardPerSec
         ).add(node.lastAvailabe);
-        uint256 passedDays = (block.timestamp.sub(node.lastClaimTime)).div(86400);
 
-        if(takeSlideFee && passedDays <= slideFeeDays)
-            rewardNode = rewardNode.mul(100-slideFee).div(100);
+        if (takeTax) {
+            uint tax = _calcSlideTax(node);
+            rewardNode = rewardNode.mul(100-tax).div(100);
+        }
 
         return rewardNode;
     }
@@ -606,6 +602,27 @@ contract NODERewardManagement {
         return string(bstr);
     }
 
+    function _calcSlideTax(NodeEntity memory node) internal view returns (uint) {
+        uint tax = 0;
+        uint256 passedTime = block.timestamp.sub(node.creationTime);
+
+        for(uint i = 0; i < slideTaxDays.length; i++) {
+            if( i < slideTaxDays.length - 1) {
+                if(passedTime > slideTaxDays[i] && passedTime <= slideTaxDays[i+1]) {
+                    tax = slideTax[i];
+                    break;
+                }
+            } else {
+                if (passedTime > slideTaxDays[i]) {
+                    tax = slideTax[i];
+                    break;
+                }
+            }
+        }
+        
+        return tax;
+    }
+
     function _changeNodePrice(uint256 newNodePrice) external onlySentry {
         nodePrice = newNodePrice;
     }
@@ -614,12 +631,12 @@ contract NODERewardManagement {
         rewardPerSec = newPrice;
     }
 
-    function _changeSlideFee(uint256 _newSlideFee) external onlySentry {
-        slideFee = _newSlideFee;
+    function _changeSlideTax(uint256[4] memory _newSlideTax) external onlySentry {
+        slideTax = _newSlideTax;
     }
 
-    function _changeSlideFeeDays(uint256 _newSlideFeeDays) external onlySentry {
-        slideFeeDays = _newSlideFeeDays;
+    function _changeSlideTaxDays(uint256[4] memory _newSlideTaxDays) external onlySentry {
+        slideTaxDays = _newSlideTaxDays;
     }
 
     function _getNodeNumberOf(address account) public view returns (uint256) {
