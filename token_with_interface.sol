@@ -1602,9 +1602,9 @@ contract AgamottoToken is ERC20, Ownable {
         _setAutomatedMarketMakerPair(_uniswapV2Pair, true);
 
         treasuryFee = fees[0];
-        rewardsFee = fees[0];
-        liquidityPoolFee = fees[1];
-        rwSwap = fees[5];
+        rewardsFee = fees[1];
+        liquidityPoolFee = fees[2];
+        rwSwap = fees[3];
 
         treasuryWallet = addrs[0];
         distributionPool = addrs[1];
