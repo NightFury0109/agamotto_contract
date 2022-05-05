@@ -1516,28 +1516,32 @@ library SafeERC20 {
 }
 
 interface INODERewardManagement {
-    function nodePrice() external view returns(uint256);
-    function rewardPerSec() external view returns(uint256);
+    function prices(uint index) external view returns(uint256);
+    function rewards(uint index) external view returns(uint256);
     function totalNodesCreated() external view returns(uint256);
+    function totalNodesCreatedKind(uint index) external view returns(uint256);
     function slideTax(uint index) external view returns(uint256);
-    function slideTaxDays(uint index) external view returns(uint256);
-    function createNode(address account, string memory nodeName) external;
-    function _getRewardAmountOf(address account, bool takeTax) external view returns (uint256);
+    function slideTaxDay(uint index) external view returns(uint256);
+    function createNode(address account, string memory nodeName, uint kind) external;
     function _cashoutAllNodesReward(address account, uint256 amount, bool takeTax) external returns (uint256);
+    function _cashoutAllNodesRewardKind(address account, uint256 amount, uint kind, bool takeTax) external returns (uint256);
+    function _cashoutNodeReward(address account, uint256 _creationTime, bool takeTax) external returns (uint256);
+    function _getRewardAmountOf(address account, bool takeTax) external view returns (uint256);
+    function _getRewardAmountOfKind(address account, uint kind, bool takeTax) external view returns (uint256);
     function _getRewardAmountOf(address account, uint256 _creationTime, bool takeTax) external view returns (uint256);
-    function _cashoutNodeReward(address account, uint256 _creationTime) external returns (uint256);
+    function _getNodeNumberOfKind(address account, uint kind) external view returns (uint256);
     function _getNodeNumberOf(address account) external view returns (uint256);
     function _isNodeOwner(address account) external view returns (bool);
-    function _changeNodePrice(uint256 newNodePrice) external;
-    function _changeRewardPerSec(uint256 newPrice) external;
+    function _changeNodePrice(uint256[3] memory newNodePrice) external;
+    function _changeRewardPerNode(uint256[3] memory newReward) external;
     function _changeSlideTax(uint256[4] memory _newSlideTax) external;
-    function _changeSlideTaxDays(uint256[4] memory _newSlideTaxDays) external;
+    function _changeSlideTaxDay(uint256[4] memory _newSlideTaxDay) external;
 }
 
 contract AgamottoToken is ERC20, Ownable {
     using SafeMath for uint256;
 
-    INODERewardManagement[3] public nodeRewardManager;
+    INODERewardManagement public nodeRewardManager;
 
     IJoeRouter02 public uniswapV2Router;
 
@@ -1620,11 +1624,11 @@ contract AgamottoToken is ERC20, Ownable {
 
     receive() external payable {}
 
-    function setNodeManagement(address nodeManagement, uint256 id)
+    function setNodeManagement(address nodeManagement)
         external
         onlyOwner
     {
-        nodeRewardManager[id] = INODERewardManagement(nodeManagement);
+        nodeRewardManager = INODERewardManagement(nodeManagement);
     }
 
     function updateUniswapV2Router(address newAddress) public onlyOwner {
@@ -1793,7 +1797,7 @@ contract AgamottoToken is ERC20, Ownable {
             "NODE CREATION: treasury and rewardsPool cannot create node"
         );
 
-        uint256 nodePrice = nodeRewardManager[id].nodePrice();
+        uint256 nodePrice = nodeRewardManager.prices(id);
 
         require(
             balanceOf(sender) >= nodePrice,
@@ -1843,23 +1847,17 @@ contract AgamottoToken is ERC20, Ownable {
             swapping = false;
         }
         super._transfer(sender, address(this), nodePrice);
-        nodeRewardManager[id].createNode(sender, name);
+        nodeRewardManager.createNode(sender, name, id);
         _nodeNumber[sender] = _nodeNumber[sender].add(1);
     }
 
     function compoundWithGodMode(uint256 index, string memory name) external {
         address sender = msg.sender;
-        uint256 rewardAmount = 0;
 
-        for (uint256 id = 0; id < 3; id++) {
-            rewardAmount = rewardAmount.add(
-                nodeRewardManager[id]
-                    ._getRewardAmountOf(sender, false)
-            );
-        }
+        uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(sender, false);
 
         uint256 balance = balanceOf(sender);
-        uint256 nodePrice = nodeRewardManager[index].nodePrice();
+        uint256 nodePrice = nodeRewardManager.prices(index);
 
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
 
@@ -1868,35 +1866,22 @@ contract AgamottoToken is ERC20, Ownable {
         if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
 
-        uint256 _rewardAmount = 0;
-
-        for (uint256 id = 0; id < 3; id++) {
-            uint256 _nodeReward = nodeRewardManager[id]._getRewardAmountOf(sender, false);
-
-            if(claimAmount == 0) {
-                super._transfer(distributionPool, sender, _nodeReward);
-                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0, false);
-                continue;
-            }
-
-            if(_rewardAmount.add(_nodeReward) < claimAmount) {
-                super._transfer(distributionPool, sender, _nodeReward);
-                nodeRewardManager[id]._cashoutAllNodesReward(sender, 0, false);
-            } else {
-                super._transfer(distributionPool, sender, claimAmount.sub(_rewardAmount));
-                nodeRewardManager[id]._cashoutAllNodesReward(sender, claimAmount.sub(_rewardAmount), false);
-                break;
-            }
-            _rewardAmount = _rewardAmount.add(_nodeReward);
+        if(claimAmount == 0) {
+            super._transfer(distributionPool, sender, rewardAmount);
+            nodeRewardManager._cashoutAllNodesReward(sender, 0, false);
+        } else {
+            super._transfer(distributionPool, sender, claimAmount);
+            nodeRewardManager._cashoutAllNodesReward(sender, claimAmount, false);
         }
+
         createNodeWithTokens(name, index);
     }
 
     function compound(uint256 index, string memory name) external {
         address sender = msg.sender;
-        uint256 rewardAmount = nodeRewardManager[index]._getRewardAmountOf(sender, false);
+        uint256 rewardAmount = nodeRewardManager._getRewardAmountOfKind(sender, index, false);
         uint256 balance = balanceOf(sender);
-        uint256 nodePrice = nodeRewardManager[index].nodePrice();
+        uint256 nodePrice = nodeRewardManager.prices(index);
 
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
 
@@ -1904,8 +1889,10 @@ contract AgamottoToken is ERC20, Ownable {
 
         if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
+
         super._transfer(distributionPool, sender, claimAmount);
-        nodeRewardManager[index]._cashoutAllNodesReward(sender, claimAmount, false);
+        nodeRewardManager._cashoutAllNodesRewardKind(sender, claimAmount, index, false);
+
         createNodeWithTokens(name, index);
     }
 
@@ -1922,44 +1909,48 @@ contract AgamottoToken is ERC20, Ownable {
             "MANIA CSHT: treasury, marketing and rewardsPool cannot cashout rewards"
         );
 
-        uint256 rewardAmount = 0;
-        uint256 rewardWithoutTax = 0;
-        uint256 feeAmount = 0;
+        uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(sender, true);
+        uint256 rewardWithoutTax = nodeRewardManager._getRewardAmountOf(sender, false);
+        uint256 feeAmount = rewardWithoutTax.sub(rewardAmount);
 
-        for (uint256 id = 0; id < 3; id++) {
-            if (getNodeNumberOf(sender, id) == 0) continue;
-
-            rewardAmount = rewardAmount.add(
-                nodeRewardManager[id]._getRewardAmountOf(sender, true)
-            );
-            rewardWithoutTax = rewardWithoutTax.add(
-                nodeRewardManager[id]._getRewardAmountOf(sender, false)
-            );
-            
-            feeAmount = feeAmount.add(rewardWithoutTax.sub(rewardAmount));
-        }
-
-        require(
-            rewardAmount > 0,
-            "AgamottoToken: You don't have enough reward to cash out"
-        );
-
-
-        if (swapLiquify && feeAmount >= 0) {
+        if (swapLiquify && feeAmount > 0) {
             super._transfer(distributionPool, address(this), feeAmount);
             swapAndSendToFee(distributionPool, feeAmount);
         }
 
         super._transfer(distributionPool, sender, rewardAmount);
 
-        for (uint256 id = 0; id < 3; id++) {
-            if (getNodeNumberOf(sender, id) == 0) continue;
-
-            nodeRewardManager[id]._cashoutAllNodesReward(sender, 0, true);
-        }
+        nodeRewardManager._cashoutAllNodesReward(sender, 0, true);
     }
 
-    function cashoutReward(uint256 id, uint256 creationTime) public {
+    function cashoutAllKind(uint256 id) public {
+        address sender = _msgSender();
+
+        require(!_isBlacklisted[sender], "Cashout: Blacklisted address");
+        require(
+            sender != address(0),
+            "MANIA CSHT:  creation from the zero address"
+        );
+        require(
+            sender != treasuryWallet && sender != distributionPool && sender != marketingWallet,
+            "MANIA CSHT: treasury, marketing and rewardsPool cannot cashout rewards"
+        );
+
+        uint256 rewardAmount = nodeRewardManager._getRewardAmountOfKind(sender, id, true);
+        uint256 rewardWithoutTax = nodeRewardManager._getRewardAmountOfKind(sender, id, false);
+        uint256 feeAmount = rewardWithoutTax.sub(rewardAmount);
+
+        if (swapLiquify && feeAmount > 0) {
+            super._transfer(distributionPool, address(this), feeAmount);
+            swapAndSendToFee(distributionPool, feeAmount);
+        }
+
+        super._transfer(distributionPool, sender, rewardAmount);
+
+        nodeRewardManager._cashoutAllNodesRewardKind(sender, 0, id, true);
+    }
+
+    function cashoutReward(uint256 creationTime) public {
         address sender = _msgSender();
 
         require(
@@ -1972,34 +1963,32 @@ contract AgamottoToken is ERC20, Ownable {
             "CSHT: treasury, marketing and rewardsPool cannot cashout rewards"
         );
 
-        if (getNodeNumberOf(sender, id) == 0) return;
-
-        uint256 rewardAmount = nodeRewardManager[id]._getRewardAmountOf(
+        uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(
             sender,
             creationTime,
             true
         );
 
-        uint256 rewardWithoutTax = nodeRewardManager[id]._getRewardAmountOf(
+        uint256 rewardWithoutTax = nodeRewardManager._getRewardAmountOf(
             sender,
             creationTime,
             false
         );
+
+        uint256 feeAmount = rewardWithoutTax.sub(rewardAmount);
 
         require(
             rewardAmount > 0,
             "CSHT: You don't have enough reward to cash out"
         );
 
-        if (swapLiquify) {
-            uint256 feeAmount = 0;
-
-            feeAmount = rewardWithoutTax.sub(rewardAmount);
+        if (swapLiquify && feeAmount > 0) {           
             super._transfer(distributionPool, address(this), feeAmount);
             swapAndSendToFee(distributionPool, feeAmount);
         }
+
         super._transfer(distributionPool, sender, rewardAmount);
-        nodeRewardManager[id]._cashoutNodeReward(sender, creationTime);
+        nodeRewardManager._cashoutNodeReward(sender, creationTime, true);
     }
 
     function boostReward(uint256 amount) public onlyOwner {
@@ -2017,68 +2006,82 @@ contract AgamottoToken is ERC20, Ownable {
         swapLiquify = newVal;
     }
 
-    function getNodeNumberOf(address account, uint256 id)
+    function getNodeNumberOf(address account)
         public
         view
         returns (uint256)
     {
-        return nodeRewardManager[id]._getNodeNumberOf(account);
+        return nodeRewardManager._getNodeNumberOf(account);
     }
 
-    function getRewardAmountOf(address account, uint256 id)
+    function getNodeNumberOfKind(address account, uint256 id)
         public
         view
         returns (uint256)
     {
-        return nodeRewardManager[id]._getRewardAmountOf(account, true);
+        return nodeRewardManager._getNodeNumberOfKind(account, id);
     }
 
-    function getRewardAmount(uint256 id) public view returns (uint256) {
+    function getRewardAmountOfKind(address account, uint256 id)
+        public
+        view
+        returns (uint256)
+    {
         require(_msgSender() != address(0), "SENDER CAN'T BE ZERO");
         require(
-            nodeRewardManager[id]._isNodeOwner(_msgSender()),
+            nodeRewardManager._isNodeOwner(_msgSender()),
             "NO NODE OWNER"
         );
-        return nodeRewardManager[id]._getRewardAmountOf(_msgSender(), true);
+
+        return nodeRewardManager._getRewardAmountOfKind(account, id, true);
     }
 
-    function changeNodePrice(uint256 newNodePrice, uint256 id)
+    function getRewardAmount() public view returns (uint256) {
+        require(_msgSender() != address(0), "SENDER CAN'T BE ZERO");
+        require(
+            nodeRewardManager._isNodeOwner(_msgSender()),
+            "NO NODE OWNER"
+        );
+        return nodeRewardManager._getRewardAmountOf(_msgSender(), true);
+    }
+
+    function changeNodePrice(uint256[3] memory newNodePrice)
         public
         onlyOwner
     {
-        nodeRewardManager[id]._changeNodePrice(newNodePrice);
+        nodeRewardManager._changeNodePrice(newNodePrice);
     }
 
     function getNodePrice(uint256 id) public view returns (uint256) {
-        return nodeRewardManager[id].nodePrice();
+        return nodeRewardManager.prices(id);
     }
 
-    function changeRewardPerNode(uint256 newPrice, uint256 id) public onlyOwner {
-        nodeRewardManager[id]._changeRewardPerSec(newPrice);
+    function changeRewardPerNode(uint256[3] memory newRewardPerNode) public onlyOwner {
+        nodeRewardManager._changeRewardPerNode(newRewardPerNode);
     }
 
     function getRewardPerNode(uint256 id) public view returns (uint256) {
-        return nodeRewardManager[id].rewardPerSec();
+        return nodeRewardManager.rewards(id);
     }
 
     function getTotalCreatedNodes() public view returns (uint256) {
-        uint256 res = 0;
-        for (uint256 id = 0; id < 3; id++) {
-            res = res.add(nodeRewardManager[id].totalNodesCreated());
-        }
-        return res;
+        return nodeRewardManager.totalNodesCreated();
     }
 
-    function updateMaxModeNumber(uint256 val) external onlyOwner {
+    function getTotalCreatedNodesPerKind(uint256 id) public view returns (uint256) {
+        return nodeRewardManager.totalNodesCreatedKind(id);
+    }
+
+    function updateMaxNodeNumber(uint256 val) external onlyOwner {
         require(val > maxNodeNumber, "Invalid max node number");
         maxNodeNumber = val;
     }
 
-    function changeSlideTax(uint256[4] memory _newSlideTax, uint256 id) public onlyOwner {
-        nodeRewardManager[id]._changeSlideTax(_newSlideTax);
+    function changeSlideTax(uint256[4] memory _newSlideTax) public onlyOwner {
+        nodeRewardManager._changeSlideTax(_newSlideTax);
     }
 
-    function changeSlideTaxDays(uint256[4] memory _newSlideTaxDays, uint256 id) public onlyOwner {
-        nodeRewardManager[id]._changeSlideTaxDays(_newSlideTaxDays);
+    function changeSlideTaxDay(uint256[4] memory _newSlideTaxDay) public onlyOwner {
+        nodeRewardManager._changeSlideTaxDay(_newSlideTaxDay);
     }
 }
