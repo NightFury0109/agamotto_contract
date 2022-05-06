@@ -375,7 +375,7 @@ contract NODERewardManagement {
 
         for (uint256 i = 0; i < nodesCount; i++) {
             _node = nodes[i];
-            nodeReward = (block.timestamp.sub(_node.lastClaimTime)).div(86400).mul(rewards[_node.kind]).add(_node.lastAvailabe);
+            nodeReward = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.lastAvailabe);
 
             if (takeTax) {
                 uint tax = _calcSlideTax(_node);
@@ -416,7 +416,7 @@ contract NODERewardManagement {
                 continue;
 
             _node = nodes[i];
-            nodeReward = (block.timestamp.sub(_node.lastClaimTime)).div(86400).mul(rewards[_node.kind]).add(_node.lastAvailabe);
+            nodeReward = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.lastAvailabe);
 
             if (takeTax) {
                 uint tax = _calcSlideTax(_node);
@@ -454,9 +454,9 @@ contract NODERewardManagement {
         );
 
         NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
-        uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).div(86400).mul(
+        uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewards[node.kind]
-        ).add(node.lastAvailabe);
+        ).div(86400).add(node.lastAvailabe);
 
         if(takeTax) {
             uint tax = _calcSlideTax(node);
@@ -483,7 +483,7 @@ contract NODERewardManagement {
         nodesCount = nodes.length;
 
         for (uint256 i = 0; i < nodesCount; i++) {
-            uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).div(86400).mul(rewards[nodes[i].kind]).add(nodes[i].lastAvailabe);
+            uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewards[nodes[i].kind]).div(86400).add(nodes[i].lastAvailabe);
 
             if (takeTax) {
                 uint tax = _calcSlideTax(nodes[i]);
@@ -513,7 +513,7 @@ contract NODERewardManagement {
             if(nodes[i].kind != kind)
                 continue;
 
-            uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).div(86400).mul(rewards[nodes[i].kind]).add(nodes[i].lastAvailabe);
+            uint256 _rewardAmount = (block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewards[nodes[i].kind]).div(86400).add(nodes[i].lastAvailabe);
 
             if (takeTax) {
                 uint tax = _calcSlideTax(nodes[i]);
@@ -544,9 +544,9 @@ contract NODERewardManagement {
         );
 
         NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
-        uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).div(86400).mul(
+        uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(
             rewards[node.kind]
-        ).add(node.lastAvailabe);
+        ).div(86400).add(node.lastAvailabe);
 
         if (takeTax) {
             uint tax = _calcSlideTax(node);
@@ -558,19 +558,21 @@ contract NODERewardManagement {
 
     function _getNodeNumberOfKind(address account, uint kind) external view returns (uint256)
     {
-        require(isNodeOwner(account), "GET NODE NUMBER: NO NODE OWNER");
+        if(isNodeOwner(account)){
+            NodeEntity[] memory nodes = _nodesOfUser[account];
+            uint256 nodesCount = nodes.length;
 
-        NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+            uint256 count = 0;
 
-        uint256 count = 0;
+            for (uint256 i = 0; i < nodesCount; i++) {
+                if(nodes[i].kind == kind)
+                    count = count.add(1);
+            }
 
-        for (uint256 i = 0; i < nodesCount; i++) {
-            if(nodes[i].kind == kind)
-                count = count.add(1);
+            return count;
+        } else {
+            return 0;
         }
-
-        return count;
     }
 
     function _getNodesNames(address account)
@@ -700,16 +702,16 @@ contract NODERewardManagement {
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
-        uint256 reward = ((block.timestamp.sub(nodes[0].lastClaimTime)).div(86400).mul
-            (rewards[nodes[0].kind])).add(nodes[0].lastAvailabe);
+        uint256 reward = ((block.timestamp.sub(nodes[0].lastClaimTime)).mul
+            (rewards[nodes[0].kind])).div(86400).add(nodes[0].lastAvailabe);
         string memory _rewardsAvailable = uint2str(reward);
         string memory separator = "#";
 
         for (uint256 i = 1; i < nodesCount; i++) {
             _node = nodes[i];
-            reward = (block.timestamp.sub(_node.lastClaimTime)).div(86400).mul(
+            reward = (block.timestamp.sub(_node.lastClaimTime)).mul(
                 rewards[_node.kind]
-            ).add(_node.lastAvailabe);
+            ).div(86400).add(_node.lastAvailabe);
             _rewardsAvailable = string(
                 abi.encodePacked(_rewardsAvailable, separator, uint2str(reward))
             );
@@ -735,7 +737,7 @@ contract NODERewardManagement {
 
         for (uint256 i = 0; i < nodesCount; i++) {
             if(nodes[i].kind == id) {
-                reward = ((block.timestamp.sub(nodes[i].lastClaimTime)).div(86400).mul(rewards[nodes[i].kind])).add(nodes[i].lastAvailabe);
+                reward = ((block.timestamp.sub(nodes[i].lastClaimTime)).mul(rewards[nodes[i].kind])).div(86400).add(nodes[i].lastAvailabe);
                 _rewardsAvailable = uint2str(reward);
                 index = i;
                 break;
@@ -745,9 +747,9 @@ contract NODERewardManagement {
         for (uint256 i = index + 1; i < nodesCount; i++) {
             if(nodes[i].kind == id) {
                 _node = nodes[i];
-                reward = (block.timestamp.sub(_node.lastClaimTime)).div(86400).mul(
+                reward = (block.timestamp.sub(_node.lastClaimTime)).mul(
                     rewards[_node.kind]
-                ).add(_node.lastAvailabe);
+                ).div(86400).add(_node.lastAvailabe);
                 _rewardsAvailable = string(
                     abi.encodePacked(_rewardsAvailable, separator, uint2str(reward))
                 );

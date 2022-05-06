@@ -1592,7 +1592,7 @@ contract AgamottoToken is ERC20, Ownable {
         address[] memory addrs,
         uint256 swapAmount,
         address uniV2Router
-    ) ERC20("Agamotto", "AGMT") {
+    ) ERC20("Agamotto_Token", "AGMT") {
         require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
 
         IJoeRouter02 _uniswapV2Router = IJoeRouter02(uniV2Router);
