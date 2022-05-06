@@ -1777,14 +1777,14 @@ contract AgamottoToken is ERC20, Ownable {
 
     function createNodeWithTokens(string memory name, uint256 id) public {
         require(
-            bytes(name).length > 3 && bytes(name).length < 32,
+            bytes(name).length >= 3 && bytes(name).length <= 32,
             "NODE CREATION: NAME SIZE INVALID"
         );
 
         address sender = _msgSender();
 
         require(
-            _nodeNumber[sender] < maxNodeNumber,
+            _nodeNumber[sender] <= maxNodeNumber,
             "cannot create node more than 100"
         );
         require(
